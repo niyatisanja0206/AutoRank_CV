@@ -14,8 +14,8 @@ deployment_name = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
 api_version = os.getenv("AZURE_OPENAI_API_VERSION")
 
 # Page config
-st.set_page_config(page_title="Resume Selector", layout="wide", page_icon="📄")
-st.title("📄 Resume Selector using GPT-4o + LangChain")
+st.set_page_config(page_title="AutoRankCV", layout="wide", page_icon="📄")
+st.title("📄 AutoRank CV - Resume Selector using GPT-4o and LangChain")
 
 # Upload resumes
 st.header("📂 Upload Resumes (PDFs only)")
