@@ -52,23 +52,23 @@ A company is hiring for the following job:
 {job_description}
 ---
 
-You have 10 resumes. Each resume is in plain text format.
+You have up to 10 resumes. Each resume is in plain text format and labeled as Candidate 1, Candidate 2, etc.
 
 Your task:
-1. Analyze and compare all resumes against the job description.
-2. Rank them from 1 to 10 (1 = best fit).
-3. Provide 1-2 sentence reason for each ranking.
+1. Analyze and compare all submitted resumes against the job description.
+2. Rank them from best fit to least fit (1 = best match).
+3. Provide a brief reason (1–2 sentences) for each candidate’s ranking.
 
 Output format:
 Ranked List:
-1. Candidate 1: [Short reason]
-2. Candidate 2: [Short reason]
+1. Candidate X: [Reason]
+2. Candidate Y: [Reason]
 ...
-10. Candidate 10: [Short reason]
 
 Begin analysis below:
 {resumes}
 """
+
     )
     return LLMChain(llm=llm, prompt=prompt)
 
