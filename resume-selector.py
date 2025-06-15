@@ -18,35 +18,39 @@ api_base = os.getenv("AZURE_OPENAI_API_BASE")
 deployment_name = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
 api_version = os.getenv("AZURE_OPENAI_API_VERSION")
 
-# UI config
+# Page configuration
 st.set_page_config(page_title="AutoRankCV", layout="wide", page_icon="📄")
+
+# Header
 st.markdown("""
     <h1 style='text-align: center;'>📄 AutoRank CV</h1>
-    <h5 style='text-align: center; color: grey;'>AI-powered Resume Ranking with Parameter-Based Scoring</h5>
+    <h4 style='text-align: center; color: grey;'>AI-powered Resume Ranking with Parameter-Based Scoring</h4>
+    <hr style='margin-top: 0;'>
 """, unsafe_allow_html=True)
-st.markdown("---")
 
-# Resume number selector
-max_files = st.number_input("How many resumes do you want to upload? (up to 100)", min_value=1, max_value=100, value=10, step=1)
+# Resume Count Selector
+st.markdown("### Number of Resumes")
+max_files = st.number_input("Select how many resumes to upload", min_value=1, max_value=100, value=10, step=1)
 
-# Upload and JD
-col1, col2 = st.columns([2, 1])
-with col1:
-    uploaded_files = st.file_uploader("Upload PDF Resumes", type="pdf", accept_multiple_files=True)
-    if uploaded_files:
-        if len(uploaded_files) > max_files:
-            st.error(f"You selected {max_files} but uploaded {len(uploaded_files)}. Please upload only the number you selected.")
-        else:
-            st.success(f"Uploaded {len(uploaded_files)} resume(s).")
+# File uploader
+st.markdown("### Upload Resumes (PDF only)")
+uploaded_files = st.file_uploader("Choose PDF files", type="pdf", accept_multiple_files=True)
 
-with col2:
-    job_description = st.text_area("Job Description", height=300)
+if uploaded_files:
+    if len(uploaded_files) > max_files:
+        st.error(f"You selected {max_files}, but uploaded {len(uploaded_files)}. Please reduce your uploads.")
+    else:
+        st.success(f"✅ Uploaded {len(uploaded_files)} resume(s).")
 
-# Analyze button
-_, btn_col, _ = st.columns([7, 1.3, 1])
+# Job Description
+st.markdown("### Job Description")
+job_description = st.text_area("Paste the job description here", height=300)
+
+# Analyze Button (smaller and right aligned)
+btn_col = st.columns([10, 1])[1]
 analyze_button = btn_col.button("Analyze", use_container_width=True)
 
-# Initialize LangChain
+# LangChain Setup
 @st.cache_resource
 def init_chain():
     llm = AzureChatOpenAI(
@@ -56,7 +60,7 @@ def init_chain():
         deployment_name=deployment_name,
         model_name="gpt-4o",
         temperature=0.3,
-        max_tokens=16000,
+        max_tokens=1600,
         top_p=0.95,
     )
     prompt = PromptTemplate(
@@ -93,6 +97,7 @@ Now begin:
 
 llm_chain = init_chain()
 
+# PDF Text Extractor
 def extract_text_from_pdf(file):
     text = ""
     try:
@@ -103,13 +108,13 @@ def extract_text_from_pdf(file):
         text += f"\n[Error reading PDF: {str(e)}]"
     return text.strip()
 
+# Summary Table PDF Generator
 def generate_pdf_table(summary_lines):
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=letter)
     width, height = letter
     y = height - 40
 
-    # Parse headers and rows from markdown-like table
     rows = [line.strip('| ').split('|') for line in summary_lines if '|' in line and '---' not in line]
     if not rows:
         c.drawString(40, y, "No table data found.")
@@ -132,12 +137,17 @@ def generate_pdf_table(summary_lines):
     buffer.seek(0)
     return buffer
 
-# Analysis
+# Candidate Name Formatter
+def bold_candidate_names(text):
+    import re
+    return re.sub(r"(Candidate\s+\d+:)", r"<strong style='font-size:1.1em;'>\1</strong>", text)
+
+# Main logic
 if analyze_button:
     if not uploaded_files or len(uploaded_files) > max_files:
-        st.warning("Please upload the exact number of resumes you selected.")
+        st.warning("⚠️ Please upload the number of resumes you selected.")
     elif not job_description.strip():
-        st.warning("Please provide a job description.")
+        st.warning("⚠️ Please enter the job description.")
     else:
         with st.spinner("🔍 Analyzing resumes..."):
             resume_texts = []
@@ -153,17 +163,20 @@ if analyze_button:
 
             result_text = response['text']
             st.success("✅ Analysis Complete!")
-            st.subheader("📊 Candidate Evaluation")
-            st.markdown(result_text)
 
-            # Extract table for PDF
+            # Candidate Evaluation
+            st.markdown("### 📄 Detailed Evaluation")
+            st.markdown(bold_candidate_names(result_text), unsafe_allow_html=True)
+
+            # Table extraction for PDF
             table_lines = [line for line in result_text.splitlines() if line.strip().startswith('|')]
             pdf_file = generate_pdf_table(table_lines)
 
+            # Download button
             st.download_button(
-                label="📥 Download Ranking Table (PDF)",
+                label="📥 Download Summary Table as PDF",
                 data=pdf_file,
-                file_name="ranked_resume_summary.pdf",
+                file_name="resume_ranking_summary.pdf",
                 mime="application/pdf",
                 use_container_width=True
             )
