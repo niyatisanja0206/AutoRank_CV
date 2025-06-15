@@ -5,6 +5,9 @@ from langchain.chains import LLMChain
 from dotenv import load_dotenv
 import os
 import fitz  # PyMuPDF for PDF text extraction
+from io import BytesIO
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
 
 # Load environment variables
 load_dotenv()
@@ -13,22 +16,40 @@ api_base = os.getenv("AZURE_OPENAI_API_BASE")
 deployment_name = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
 api_version = os.getenv("AZURE_OPENAI_API_VERSION")
 
-# Page config
+# Page configuration
 st.set_page_config(page_title="AutoRankCV", layout="wide", page_icon="📄")
-st.title("📄 AutoRank CV - Resume Selector using GPT-4o and LangChain")
 
-# Upload resumes
-st.header("📂 Upload Resumes (PDFs only)")
-uploaded_files = st.file_uploader("Upload up to 10 resume PDFs", type=["pdf"], accept_multiple_files=True)
+st.markdown(
+    "<h1 style='text-align: center;'>📄 AutoRank CV</h1>"
+    "<h5 style='text-align: center; color: grey;'>AI-powered Resume Ranking using GPT-4o & LangChain</h5>",
+    unsafe_allow_html=True
+)
+st.markdown("---")
 
-# Job description input
-st.header("🧾 Job Description")
-job_description = st.text_area("Paste the job description here", height=300)
+# Upload resumes and job description input
+col1, col2 = st.columns([2, 1])
 
-# Button
-analyze_button = st.button("🚀 Analyze & Rank Resumes")
+with col1:
+    st.subheader("📂 Upload Resumes")
+    uploaded_files = st.file_uploader("Upload up to 10 PDF resumes", type=["pdf"], accept_multiple_files=True)
+    if uploaded_files:
+        st.success(f"{len(uploaded_files)} resume(s) uploaded.")
+    else:
+        st.info("Awaiting resume uploads.")
 
-# LLM setup
+with col2:
+    st.subheader("🧾 Job Description")
+    job_description = st.text_area(
+        "Paste the job description here:",
+        height=300,
+        placeholder="E.g. We're looking for a Machine Learning Engineer with experience in Python, ML frameworks, cloud platforms..."
+    )
+
+# Analyze button - smaller and right-aligned
+_, col_btn, _ = st.columns([7, 1.3, 1])
+analyze_button = col_btn.button("Analyze", use_container_width=True)
+
+# LLM Setup
 @st.cache_resource
 def init_chain():
     llm = AzureChatOpenAI(
@@ -68,13 +89,12 @@ Ranked List:
 Begin analysis below:
 {resumes}
 """
-
     )
     return LLMChain(llm=llm, prompt=prompt)
 
 llm_chain = init_chain()
 
-# Helper: Extract PDF text
+# Extract text from PDF
 def extract_text_from_pdf(file):
     text = ""
     try:
@@ -85,20 +105,37 @@ def extract_text_from_pdf(file):
         text += f"\n[Error reading PDF: {str(e)}]"
     return text.strip()
 
-# Handle logic
+# Generate PDF file from content
+def generate_pdf(content):
+    buffer = BytesIO()
+    p = canvas.Canvas(buffer, pagesize=letter)
+    width, height = letter
+    y = height - 40
+
+    lines = content.split('\n')
+    for line in lines:
+        if y < 40:
+            p.showPage()
+            y = height - 40
+        p.drawString(40, y, line.strip())
+        y -= 15
+
+    p.save()
+    buffer.seek(0)
+    return buffer
+
+# Run Analysis
 if analyze_button:
     if not uploaded_files or len(uploaded_files) > 10:
         st.warning("Please upload between 1 and 10 PDF resumes.")
     elif not job_description.strip():
-        st.warning("Please provide a job description.")
+        st.warning("Please enter a job description.")
     else:
-        with st.spinner("Analyzing resumes with GPT-4o..."):
-
+        with st.spinner("🔍 Analyzing resumes..."):
             resume_texts = []
             for idx, file in enumerate(uploaded_files):
                 text = extract_text_from_pdf(file)
-                resume_texts.append(f"\n\nCandidate {idx+1} Resume:\n{text[:3000]}")  # truncate if too long
-
+                resume_texts.append(f"\n\nCandidate {idx+1} Resume:\n{text[:3000]}")  # Optional truncate
             combined_resumes = "\n".join(resume_texts)
 
             response = llm_chain.invoke({
@@ -107,11 +144,16 @@ if analyze_button:
             })
 
             st.success("✅ Ranking Complete!")
-            st.subheader("📊 Ranked Resumes")
+            st.markdown("---")
+            st.subheader("📊 Ranked Candidates")
             st.markdown(response['text'])
+
+            # Generate and offer PDF download
+            pdf_data = generate_pdf(response['text'])
             st.download_button(
-                label="Download Rankings",
-                data=response['text'],
-                file_name="ranked_resumes.txt",
-                mime="text/plain"
+                label="📥 Download Rankings as PDF",
+                data=pdf_data,
+                file_name="ranked_resumes.pdf",
+                mime="application/pdf",
+                use_container_width=True
             )
