@@ -73,6 +73,8 @@ Export to Excel or CSV
 
 Add filtering/sorting by parameter
 
+Display graphs
+
 User authentication for recruiters
 
 Resume parsing enhancements (e.g., Named Entity Recognition)
