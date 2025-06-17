@@ -30,6 +30,7 @@ st.markdown("""
 
 # Resume Count Selector
 st.markdown("### Number of Resumes")
+st.write("Select the number of resumes you want to upload for analysis. The maximum is 100.")
 max_files = st.number_input("Select how many resumes to upload", min_value=1, max_value=100, value=10, step=1)
 
 # File uploader
