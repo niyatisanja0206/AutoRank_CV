@@ -6,10 +6,14 @@ from dotenv import load_dotenv
 import os
 import fitz  # PyMuPDF
 from io import BytesIO
+from reportlab.platypus import (
+    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+)
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
-from reportlab.platypus import Table, TableStyle
+from reportlab.lib.units import inch
 from reportlab.lib import colors
+import re
 
 # Load environment variables
 load_dotenv()
@@ -77,11 +81,11 @@ A company is hiring for this role:
 You're given several resumes labeled Candidate 1, Candidate 2, etc.
 
 For each candidate, evaluate on the following criteria:
-1. **Technical Skills**
-2. **Relevant Experience**
-3. **Education Alignment**
-4. **Communication and Presentation**
-5. **Overall Fit for the Role**
+1. Technical Skills
+2. Relevant Experience
+3. Education Alignment
+4. Communication and Presentation
+5. Overall Fit for the Role
 
 For each parameter, give a score out of 10 with reasoning. Then compute a final average score and rank all candidates from best to worst.
 
@@ -109,38 +113,64 @@ def extract_text_from_pdf(file):
         text += f"\n[Error reading PDF: {str(e)}]"
     return text.strip()
 
-# Summary Table PDF Generator
-def generate_pdf_table(summary_lines):
+# Markdown cleaner
+def clean_markdown(text):
+    text = re.sub(r"\*\*(.*?)\*\*", r"\1", text)     # remove bold
+    text = re.sub(r"#+\s*", "", text)                # remove headings
+    text = re.sub(r"- ", "• ", text)                 # bullet points
+    return text.strip()
+
+# PDF Report Generator (final version)
+def generate_full_pdf_report(full_text, summary_lines):
     buffer = BytesIO()
-    c = canvas.Canvas(buffer, pagesize=letter)
-    width, height = letter
-    y = height - 40
+    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=60, bottomMargin=60)
+    elements = []
+    styles = getSampleStyleSheet()
+    normal = ParagraphStyle(name="Normal", fontSize=10, leading=14, spaceAfter=6)
+    header = ParagraphStyle(name="Header", parent=styles["Heading2"], spaceAfter=12)
 
-    rows = [line.strip('| ').split('|') for line in summary_lines if '|' in line and '---' not in line]
-    if not rows:
-        c.drawString(40, y, "No table data found.")
-        c.save()
-        buffer.seek(0)
-        return buffer
+    # Clean and split candidate sections (before summary table)
+    cleaned_text = re.split(r"\n\s*### Final Summary Table", full_text)[0]
+    # Remove any pipe table lines from the body
+    cleaned_text = "\n".join([line for line in cleaned_text.splitlines() if not line.strip().startswith("|")])
+    sections = cleaned_text.split("---")
 
-    table = Table(rows)
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('GRID', (0, 0), (-1, -1), 1, colors.black),
-        ('FONTSIZE', (0, 0), (-1, -1), 8)
-    ]))
+    for section in sections:
+        cleaned = clean_markdown(section.strip())
+        if cleaned:
+            for para in cleaned.split('\n'):
+                if para.strip():
+                    elements.append(Paragraph(para.strip(), normal))
+            elements.append(Spacer(1, 0.2 * inch))
 
-    table.wrapOn(c, width, height)
-    table.drawOn(c, 30, y - len(rows)*15)
-    c.save()
+    # Add Summary Table once
+    # Clean each cell to remove markdown like **bold**
+    rows = [
+        [re.sub(r"\*\*(.*?)\*\*", r"\1", cell.strip()) for cell in line.strip('| ').split('|')]
+        for line in summary_lines
+        if '|' in line and '---' not in line
+    ]
+    if rows:
+        elements.append(Paragraph("Final Summary Table", header))
+        table = Table(rows, hAlign='LEFT')
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 0.25, colors.black),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey])
+        ]))
+        elements.append(Spacer(1, 0.3 * inch))
+        elements.append(table)
+
+    doc.build(elements)
     buffer.seek(0)
     return buffer
 
-# Candidate Name Formatter
+# Candidate Name Formatter for web
 def bold_candidate_names(text):
-    import re
     return re.sub(r"(Candidate\s+\d+:)", r"<strong style='font-size:1.1em;'>\1</strong>", text)
 
 # Main logic
@@ -165,19 +195,20 @@ if analyze_button:
             result_text = response['text']
             st.success("✅ Analysis Complete!")
 
-            # Candidate Evaluation
+            # Display in app
             st.markdown("### 📄 Detailed Evaluation")
             st.markdown(bold_candidate_names(result_text), unsafe_allow_html=True)
 
-            # Table extraction for PDF
+            # Extract table lines
             table_lines = [line for line in result_text.splitlines() if line.strip().startswith('|')]
-            pdf_file = generate_pdf_table(table_lines)
 
-            # Download button
+            # Generate PDF
+            pdf_file = generate_full_pdf_report(result_text, table_lines)
+
             st.download_button(
-                label="📥 Download Summary Table as PDF",
+                label="📥 Download Full Report as PDF",
                 data=pdf_file,
-                file_name="resume_ranking_summary.pdf",
+                file_name="resume_ranking_report.pdf",
                 mime="application/pdf",
                 use_container_width=True
             )
