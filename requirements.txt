@@ -1,0 +1,8 @@
+streamlit
+openai
+langchain
+PyMuPDF
+reportlab
+pandas
+numpy
+python-dotenv
