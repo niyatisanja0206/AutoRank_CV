@@ -65,7 +65,7 @@ def init_chain():
         deployment_name=deployment_name,
         model_name="gpt-4o",
         temperature=0.3,
-        max_tokens=1600,
+        max_tokens=10000,
         top_p=0.95,
     )
     prompt = PromptTemplate(
